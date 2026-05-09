@@ -1,5 +1,9 @@
     processor 6502
 
+    ; --- PRG Header ---
+    ORG $07ff
+    .word $0801 ; Load address
+
     ; --- Constants ---
 VIC_BASE      = $d000
 VIC_SCROLY    = $d011
@@ -59,6 +63,11 @@ start:
     lda #$01
     sta VIC_MC2     ; White
 
+    ; Enable multicolor mode globally (for logo)
+    lda VIC_SCROLX
+    ora #$10        ; Bit 4 = Multicolor mode
+    sta VIC_SCROLX
+
     cli
 
 main_loop:
@@ -83,7 +92,7 @@ irq_top:
     lsr             ; Get character offset (0-2)
     tay
     clc
-    adc #10         ; Base X position in chars
+    adc #8          ; Adjusted base X position for larger logo
     sta logo_x_pos
 
     lda sine_table,x
@@ -169,7 +178,7 @@ irq_scroll:
 
     lda scroll_soft
     and #$07
-    ora #$08        ; 40 cols, no multicolor
+    ora #$08        ; 40 cols, no multicolor ($08 instead of $18)
     sta VIC_SCROLX
 
     jsr update_scroll
@@ -214,46 +223,64 @@ clear_screen:
     rts
 
 init_logo:
-    ; Data is copied in init_chars
     rts
 
 update_logo_pos:
-    ; Clear old logo line
+    ; Clear old logo area (3 rows)
     ldx #39
     lda #$20
-.clear_lp: sta SCREEN_RAM + 40*5,x
+.clear_lp:
+    sta SCREEN_RAM + 40*4,x
+    sta SCREEN_RAM + 40*5,x
     sta SCREEN_RAM + 40*6,x
     dex
     bpl .clear_lp
 
-    ; Draw new logo position
+    ; Draw Row 0
     ldx #0
 .l1: lda logo_chars,x
     ldy logo_x_pos
+    sta SCREEN_RAM + 40*4,y
+    lda #$0f ; Light Grey (Multi bit 3 = 1)
+    sta $d800 + 40*4,y
+    inc logo_x_pos
+    inx
+    cpx #15
+    bne .l1
+
+    lda logo_x_pos
+    sec
+    sbc #15
+    sta logo_x_pos
+
+    ; Draw Row 1
+    ldx #0
+.l2: lda logo_chars+15,x
+    ldy logo_x_pos
     sta SCREEN_RAM + 40*5,y
-    lda #$07 ; Yellow
+    lda #$0f
     sta $d800 + 40*5,y
     inc logo_x_pos
     inx
-    cpx #10
-    bne .l1
+    cpx #15
+    bne .l2
 
-    ; Reset x_pos for second row
     lda logo_x_pos
     sec
-    sbc #10
+    sbc #15
     sta logo_x_pos
 
+    ; Draw Row 2
     ldx #0
-.l2: lda logo_chars+10,x
+.l3: lda logo_chars+30,x
     ldy logo_x_pos
     sta SCREEN_RAM + 40*6,y
-    lda #$07
+    lda #$0f
     sta $d800 + 40*6,y
     inc logo_x_pos
     inx
-    cpx #10
-    bne .l2
+    cpx #15
+    bne .l3
     rts
 
 init_chars:
@@ -261,12 +288,11 @@ init_chars:
 .c1:
     lda logo_data,x
     sta CHAR_RAM,x
-    lda logo_data+100,x
-    sta CHAR_RAM+100,x
-    lda logo_data+200,x
-    sta CHAR_RAM+200,x
+    lda logo_data+256,x
+    sta CHAR_RAM+256,x
+    lda logo_data+512,x
+    sta CHAR_RAM+512,x
     inx
-    cpx #100
     bne .c1
     rts
 
@@ -368,30 +394,56 @@ bar_colors:
     .byte $06, $0e, $03, $01, $01, $03, $0e, $06, $00, $00, $00, $00, $00, $00, $00, $00
 
 logo_chars:
-    .byte 0, 1, 4, 5, 8, 9, 12, 13, 16, 17 ; Top row
-    .byte 2, 3, 6, 7, 10, 11, 14, 15, 18, 19 ; Bottom row
+    .byte 0,1,2,9,10,11,18,19,20,27,28,29,36,37,38 ; Row 0
+    .byte 3,4,5,12,13,14,21,22,23,30,31,32,39,40,41 ; Row 1
+    .byte 6,7,8,15,16,17,24,25,26,33,34,35,42,43,44 ; Row 2
 
 logo_data:
-    .byte 85,170,255,255,255,170,85,85 ; P 0
-    .byte 80,160,240,240,240,160,80,80 ; P 1
-    .byte 85,85,80,160,240,240,160,80 ; P 2
-    .byte 80,80,0,0,0,0,0,0 ; P 3
-    .byte 85,170,255,255,255,170,85,85 ; E 0
-    .byte 85,170,255,255,255,170,85,85 ; E 1
-    .byte 85,85,85,170,255,255,170,85 ; E 2
-    .byte 0,0,85,170,0,0,170,85 ; E 3
-    .byte 85,170,255,255,255,170,85,85 ; R 0
-    .byte 80,160,240,240,240,160,80,80 ; R 1
-    .byte 85,85,85,170,240,240,160,80 ; R 2
-    .byte 80,80,80,160,240,240,160,80 ; R 3
-    .byte 85,170,255,255,255,170,85,85 ; F 0
-    .byte 85,170,255,255,255,170,85,85 ; F 1
-    .byte 80,80,80,160,240,240,160,80 ; F 2
-    .byte 0,0,80,160,0,0,0,0 ; F 3
-    .byte 85,170,255,255,255,170,85,85 ; F 0
-    .byte 85,170,255,255,255,170,85,85 ; F 1
-    .byte 80,80,80,160,240,240,160,80 ; F 2
-    .byte 0,0,80,160,0,0,0,0 ; F 3
+    .byte 85,170,255,255,255,170,85,85 ; P R0C0
+    .byte 85,170,255,255,255,170,85,85 ; P R0C1
+    .byte 80,160,240,240,240,160,80,80 ; P R0C2
+    .byte 85,85,170,255,255,255,170,85 ; P R1C0
+    .byte 85,85,170,255,255,255,170,85 ; P R1C1
+    .byte 80,80,160,240,240,240,160,80 ; P R1C2
+    .byte 80,80,80,160,240,240,160,80 ; P R2C0
+    .byte 0,0,0,0,0,0,0,0 ; P R2C1
+    .byte 0,0,0,0,0,0,0,0 ; P R2C2
+    .byte 85,170,255,255,255,170,85,85 ; E R0C0
+    .byte 85,170,255,255,255,170,85,85 ; E R0C1
+    .byte 85,170,255,255,255,170,85,85 ; E R0C2
+    .byte 85,85,170,255,255,255,170,85 ; E R1C0
+    .byte 85,85,170,255,255,255,170,85 ; E R1C1
+    .byte 0,0,0,0,0,0,0,0 ; E R1C2
+    .byte 85,85,85,170,255,255,170,85 ; E R2C0
+    .byte 85,85,85,170,255,255,170,85 ; E R2C1
+    .byte 85,85,85,170,255,255,170,85 ; E R2C2
+    .byte 85,170,255,255,255,170,85,85 ; R R0C0
+    .byte 85,170,255,255,255,170,85,85 ; R R0C1
+    .byte 80,160,240,240,240,160,80,80 ; R R0C2
+    .byte 85,85,170,255,255,255,170,85 ; R R1C0
+    .byte 85,85,170,255,255,255,170,85 ; R R1C1
+    .byte 85,85,170,255,255,255,170,85 ; R R1C2
+    .byte 80,80,80,160,240,240,160,80 ; R R2C0
+    .byte 0,0,0,0,0,0,0,0 ; R R2C1
+    .byte 80,80,80,160,240,240,160,80 ; R R2C2
+    .byte 85,170,255,255,255,170,85,85 ; F R0C0
+    .byte 85,170,255,255,255,170,85,85 ; F R0C1
+    .byte 85,170,255,255,255,170,85,85 ; F R0C2
+    .byte 80,80,160,240,240,240,160,80 ; F R1C0
+    .byte 85,85,170,255,255,255,170,85 ; F R1C1
+    .byte 0,0,0,0,0,0,0,0 ; F R1C2
+    .byte 80,80,80,160,240,240,160,80 ; F R2C0
+    .byte 0,0,0,0,0,0,0,0 ; F R2C1
+    .byte 0,0,0,0,0,0,0,0 ; F R2C2
+    .byte 85,170,255,255,255,170,85,85 ; F R0C0
+    .byte 85,170,255,255,255,170,85,85 ; F R0C1
+    .byte 85,170,255,255,255,170,85,85 ; F R0C2
+    .byte 80,80,160,240,240,240,160,80 ; F R1C0
+    .byte 85,85,170,255,255,255,170,85 ; F R1C1
+    .byte 0,0,0,0,0,0,0,0 ; F R1C2
+    .byte 80,80,80,160,240,240,160,80 ; F R2C0
+    .byte 0,0,0,0,0,0,0,0 ; F R2C1
+    .byte 0,0,0,0,0,0,0,0 ; F R2C2
 
     ; SID Data at $5000
     ORG $5000
