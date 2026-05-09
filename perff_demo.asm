@@ -186,33 +186,14 @@ irq_scroll:
 
 ; --- Subroutines ---
 
-; Minimal SID "Commando-ish" Arpeggio
+; SID Player
 init_music:
-    lda #0
-    ldx #0
-.l: sta $d400,x
-    inx
-    cpx #25
-    bne .l
-    lda #$0f
-    sta $d418 ; Volume
+    lda #0          ; Tune 0
+    jsr $5fb2       ; Init address from SID header
     rts
 
 play_music:
-    inc music_tick
-    lda music_tick
-    lsr
-    lsr
-    and #3
-    tax
-    lda arp_table,x
-    sta $d401 ; Voice 1 High
-    lda #$21  ; Sawtooth
-    sta $d404
-    lda #$44
-    sta $d405 ; Attack/Decay
-    lda #$f8
-    sta $d406 ; Sustain/Release
+    jsr $5012       ; Play address from SID header
     rts
 
 clear_screen:
@@ -282,6 +263,8 @@ init_chars:
     sta CHAR_RAM,x
     lda logo_data+100,x
     sta CHAR_RAM+100,x
+    lda logo_data+200,x
+    sta CHAR_RAM+200,x
     inx
     cpx #100
     bne .c1
@@ -329,8 +312,6 @@ update_scroll:
 logo_x_pos: .byte 15
 bar_y: .byte 0
 bar_tick: .byte 0
-music_tick: .byte 0
-arp_table: .byte $10, $14, $18, $20
 
 scroll_ptr: .byte 0
 scroll_soft: .byte 0
@@ -391,23 +372,27 @@ logo_chars:
     .byte 2, 3, 6, 7, 10, 11, 14, 15, 18, 19 ; Bottom row
 
 logo_data:
-    .byte 42,42,34,34,34,34,34,34
-    .byte 168,168,136,136,168,168,0,0
-    .byte 32,32,32,32,32,32,32,32
-    .byte 0,0,0,0,0,0,0,0
-    .byte 42,42,32,32,42,42,32,32
-    .byte 168,168,0,0,168,168,0,0
-    .byte 42,42,0,0,0,0,0,0
-    .byte 168,168,0,0,0,0,0,0
-    .byte 42,42,34,34,34,34,34,34
-    .byte 168,168,136,136,168,168,136,136
-    .byte 32,32,32,32,32,32,32,32
-    .byte 8,8,6,6,3,3,0,0
-    .byte 42,42,32,32,42,42,32,32
-    .byte 168,168,0,0,0,0,0,0
-    .byte 32,32,32,32,32,32,32,32
-    .byte 0,0,0,0,0,0,0,0
-    .byte 42,42,32,32,42,42,32,32
-    .byte 168,168,0,0,0,0,0,0
-    .byte 32,32,32,32,32,32,32,32
-    .byte 0,0,0,0,0,0,0,0
+    .byte 85,170,255,255,255,170,85,85 ; P 0
+    .byte 80,160,240,240,240,160,80,80 ; P 1
+    .byte 85,85,80,160,240,240,160,80 ; P 2
+    .byte 80,80,0,0,0,0,0,0 ; P 3
+    .byte 85,170,255,255,255,170,85,85 ; E 0
+    .byte 85,170,255,255,255,170,85,85 ; E 1
+    .byte 85,85,85,170,255,255,170,85 ; E 2
+    .byte 0,0,85,170,0,0,170,85 ; E 3
+    .byte 85,170,255,255,255,170,85,85 ; R 0
+    .byte 80,160,240,240,240,160,80,80 ; R 1
+    .byte 85,85,85,170,240,240,160,80 ; R 2
+    .byte 80,80,80,160,240,240,160,80 ; R 3
+    .byte 85,170,255,255,255,170,85,85 ; F 0
+    .byte 85,170,255,255,255,170,85,85 ; F 1
+    .byte 80,80,80,160,240,240,160,80 ; F 2
+    .byte 0,0,80,160,0,0,0,0 ; F 3
+    .byte 85,170,255,255,255,170,85,85 ; F 0
+    .byte 85,170,255,255,255,170,85,85 ; F 1
+    .byte 80,80,80,160,240,240,160,80 ; F 2
+    .byte 0,0,80,160,0,0,0,0 ; F 3
+
+    ; SID Data at $5000
+    ORG $5000
+    incbin "commando_data.bin"
